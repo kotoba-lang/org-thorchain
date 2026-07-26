@@ -225,10 +225,12 @@
 
 (deftest unknown-abbreviation-fails-closed
   (testing "an abbreviation we have not measured is its own problem, not a pass"
+    ;; BSC was halted when the table was measured, so its shorthand is unknown —
+    ;; and must stay unknown rather than be inferred from the b/e/d/c/l pattern.
     (let [{:keys [ok? problems]}
           (q/verify-memo {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
-                          :to-asset "LTC.LTC"}
-                         "=:l:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:1")]
+                          :to-asset "BSC.BNB"}
+                         "=:s:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:1")]
       (is (false? ok?))
       (is (some #(= :asset-abbreviation-unrecognized (:problem %)) problems)
           "silently accepting it could mean paying out a different asset"))))
@@ -238,8 +240,11 @@
   (is (= "BTC.BTC" (:asset (asset/expand "b"))))
   (is (= "THOR.RUNE" (:asset (asset/expand "r"))))
   (is (= "AVAX.AVAX" (:asset (asset/expand "a"))))
+  (is (= "DOGE.DOGE" (:asset (asset/expand "d"))))
+  (is (= "BCH.BCH" (:asset (asset/expand "c"))))
+  (is (= "LTC.LTC" (:asset (asset/expand "l"))))
   (is (= "ETH.ETH" (:asset (asset/expand "ETH.ETH"))) "full notation still works")
-  (is (nil? (asset/expand "l")) "not measured -> nil, never a guess")
+  (is (nil? (asset/expand "s")) "BSC was halted, so unmeasured -> nil, never a guess")
   (is (nil? (asset/expand "zzz"))))
 
 (deftest token-contract-dropped-by-the-node-is-tolerated
@@ -268,3 +273,38 @@
 
 (deftest known-endpoints-records-the-one-open-host
   (is (= :open (:state (get q/known-endpoints "rest.cosmos.directory/thorchain")))))
+
+;; ══ Tier-2 chains: abbreviations measured from the live network 2026-07-26 ══
+
+(deftest btc-family-abbreviations-are-measured
+  (testing "DOGE/BCH/LTC — read out of live memos, and each address format was
+            validated by the network accepting it as a destination"
+    (is (= "DOGE.DOGE" (:asset (asset/expand "d"))))
+    (is (= "BCH.BCH" (:asset (asset/expand "c"))))
+    (is (= "LTC.LTC" (:asset (asset/expand "l"))))))
+
+(deftest halted-chains-are-absent-not-guessed
+  (testing "BSC.BNB and BASE.ETH were halted on 2026-07-26, so a quote never
+            emits a memo to read an abbreviation out of"
+    ;; "s" and "n" and similar are NOT registered — an unmeasurable abbreviation
+    ;; must fail closed rather than be filled in by inference from the pattern.
+    (is (nil? (asset/expand "s")))
+    (is (nil? (asset/expand "n")))
+    (testing "full notation still works for them, which is what a caller should use"
+      (is (= "BSC.BNB" (:asset (asset/expand "BSC.BNB"))))
+      (is (= "BASE.ETH" (:asset (asset/expand "BASE.ETH")))))))
+
+(deftest verify-memo-accepts-every-measured-abbreviation
+  (doseq [[abbrev full] [["d" "DOGE.DOGE"] ["c" "BCH.BCH"] ["l" "LTC.LTC"]
+                         ["e" "ETH.ETH"] ["b" "BTC.BTC"] ["a" "AVAX.AVAX"]]]
+    (testing (str full " abbreviated as " abbrev)
+      (is (:ok? (q/verify-memo {:destination "dest1" :to-asset full}
+                               (str "=:" abbrev ":dest1:1")))))))
+
+(deftest verify-memo-catches-a-swapped-btc-family-asset
+  (testing "d/c/l are all short and adjacent — a mixup must still be caught"
+    (let [{:keys [ok? problems]} (q/verify-memo {:destination "dest1" :to-asset "DOGE.DOGE"}
+                                                "=:l:dest1:1")]
+      (is (false? ok?))
+      (is (some #(= :asset-mismatch (:problem %)) problems)
+          "asked for DOGE, memo says LTC"))))

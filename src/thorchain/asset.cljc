@@ -77,8 +77,21 @@
   returns, measured against a live node on 2026-07-26 by requesting a quote per
   asset and reading back `memo`:
 
-    ETH.ETH   -> \"e\"        AVAX.AVAX -> \"a\"
-    BTC.BTC   -> \"b\"        THOR.RUNE -> \"r\"
+    ETH.ETH   -> \"e\"        AVAX.AVAX -> \"a\"        DOGE.DOGE -> \"d\"
+    BTC.BTC   -> \"b\"        THOR.RUNE -> \"r\"        BCH.BCH   -> \"c\"
+                                                   LTC.LTC   -> \"l\"
+
+  NOT measurable on 2026-07-26 and therefore ABSENT: `BSC.BNB` and `BASE.ETH`.
+  Both chains were `halted: true` / `chain_trading_paused: true`, so a quote
+  answers \"trading is halted\" and never reaches the point of emitting a memo.
+  Omitted rather than guessed — re-measure when the halt lifts. (`SOL.SOL` was
+  halted too, for the record.)
+
+  Each Tier-2 address FORMAT was validated the same way: the network accepted a
+  derived address as a destination for that chain. It rejects a malformed one
+  (\"unable to parse address\"), which makes it a usable independent oracle — an
+  early LTC attempt that reused Bitcoin's bech32 checksum was caught exactly that
+  way.
 
   This table exists because a quote's memo is the thing that decides WHICH ASSET
   the user receives, and the node writes it in its own abbreviated dialect — so a
@@ -98,7 +111,10 @@
   {"e" "ETH.ETH"
    "b" "BTC.BTC"
    "r" "THOR.RUNE"
-   "a" "AVAX.AVAX"})
+   "a" "AVAX.AVAX"
+   "d" "DOGE.DOGE"
+   "c" "BCH.BCH"
+   "l" "LTC.LTC"})
 
 (defn expand
   "Asset notation OR a verified single-token abbreviation -> a parsed asset map.
