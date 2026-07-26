@@ -20,14 +20,32 @@
             [thorchain.asset :as asset]
             [thorchain.memo :as memo]))
 
-(def mainnet-base-url
-  "THORNode's public mainnet API. Not baked into requests — `*-request` returns a
-  path and the caller chooses the host, so a deployment can point at its own node
-  (which it should: a public endpoint is a trusted third party in a flow whose
-  whole premise is not needing one)."
-  "https://thornode.ninerealms.com")
+(def known-endpoints
+  "Candidate THORNode hosts, WITH their observed state — because \"here is a public
+  endpoint\" turned out to be the wrong shape of answer.
 
-(def stagenet-base-url "https://stagenet-thornode.ninerealms.com")
+  Measured 2026-07-26 from a plain HTTP client:
+
+    thornode.ninerealms.com          DNS does not resolve (not even via 1.1.1.1)
+    midgard.ninerealms.com           DNS does not resolve
+    thornode.thorswap.net            Cloudflare bot interstitial (403, \"Just a
+                                     moment...\")
+    thornode.thorchain.liquify.com   resolves, connection did not complete
+
+  So there is currently NO public THORNode host this library can name as a default
+  that a programmatic client can actually use. That is why `base-url` is a REQUIRED
+  argument rather than defaulted (see `url`): a default pointing at a dead or
+  bot-gated host is worse than no default, because it fails at the moment someone
+  is trying to move funds and it looks like a bug in this code.
+
+  Run your own node, or use an endpoint you have an agreement with. This library
+  already said that was the right thing to do; the measurements make it mandatory
+  rather than advisory. Working around bot protection is not an option this library
+  will offer."
+  {"thornode.ninerealms.com"        {:state :dns-nxdomain :measured "2026-07-26"}
+   "midgard.ninerealms.com"         {:state :dns-nxdomain :measured "2026-07-26"}
+   "thornode.thorswap.net"          {:state :bot-protected :measured "2026-07-26"}
+   "thornode.thorchain.liquify.com" {:state :unreachable :measured "2026-07-26"}})
 
 ;; ─── requests ────────────────────────────────────────────────────────────
 
@@ -85,8 +103,18 @@
   {:method :get :path "/thorchain/pools"})
 
 (defn url
-  "`base-url` + a request map -> a full URL with an encoded query string."
+  "`base-url` + a request map -> a full URL with an encoded query string.
+
+  `base-url` is required and has no default on purpose — see `known-endpoints`
+  for the measurements behind that decision. Throws on a missing or blank host
+  rather than silently building a relative URL that fails later."
   [base-url {:keys [path query]}]
+  (when (or (nil? base-url) (str/blank? (str base-url)))
+    (throw (ex-info (str "thorchain: base-url is required — there is no usable public"
+                         " THORNode default (see thorchain.quote/known-endpoints)."
+                         " Point this at your own node or one you have an agreement"
+                         " with.")
+                    {:known-endpoints known-endpoints})))
   (str base-url path
        (when (seq query)
          (str "?" (str/join "&" (for [[k v] (sort query)]
