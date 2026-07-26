@@ -42,7 +42,11 @@
   already said that was the right thing to do; the measurements make it mandatory
   rather than advisory. Working around bot protection is not an option this library
   will offer."
-  {"thornode.ninerealms.com"        {:state :dns-nxdomain :measured "2026-07-26"}
+  {"rest.cosmos.directory/thorchain" {:state :open :measured "2026-07-26"
+                                     :note (str "serves the custom /thorchain/* routes including"
+                                                " quote/swap and thorname — the one host measured"
+                                                " here that a plain HTTP client can use")}
+   "thornode.ninerealms.com"        {:state :dns-nxdomain :measured "2026-07-26"}
    "midgard.ninerealms.com"         {:state :dns-nxdomain :measured "2026-07-26"}
    "thornode.thorswap.net"          {:state :bot-protected :measured "2026-07-26"}
    "thornode.thorchain.liquify.com" {:state :unreachable :measured "2026-07-26"}})
@@ -95,6 +99,30 @@
   address the network no longer watches."
   []
   {:method :get :path "/thorchain/inbound_addresses"})
+
+(defn thorname-request
+  "Build a `/thorchain/thorname/{name}` request.
+
+  WHY THIS IS NECESSARY: an affiliate must be a REGISTERED THORName or a valid
+  address. A live node rejects an unregistered name outright — `cannot parse 'kb'
+  as an Address: kb is not recognizable` — which means a memo built with an
+  unregistered affiliate makes the whole swap fail and refund, minus fees. The
+  name's shape cannot tell you this: an unregistered name looks exactly like a
+  registered one.
+
+  `registered?` reads the answer."
+  [name]
+  {:method :get :path (str "/thorchain/thorname/" name)})
+
+(defn registered?
+  "Is a `/thorchain/thorname/{name}` response for a REGISTERED name?
+
+  The route answers 200 either way; an unregistered name comes back as a hollow
+  record with no owner and no expiry. So presence of `owner` is the discriminator,
+  not the status code."
+  [body]
+  (boolean (and (map? body)
+                (seq (str (or (get body "owner") (get body :owner) ""))))))
 
 (defn pools-request
   "Build a `/thorchain/pools` request — what is actually tradeable right now, with
@@ -208,8 +236,23 @@
           (conj {:problem :destination-mismatch
                  :requested destination :returned (:destination parsed)})
 
+          ;; The node writes the asset in its own abbreviated dialect ("e" for
+          ;; ETH.ETH, and the contract part dropped for tokens), so this compares
+          ;; through `asset/expand`. An abbreviation the table does not know is
+          ;; reported as its OWN problem rather than as a mismatch: "I cannot
+          ;; identify this asset" and "this is the wrong asset" call for different
+          ;; responses, and conflating them would hide the first.
           (and parsed to-asset (:to-asset parsed)
-               (let [want (asset/parse to-asset) got (asset/parse (:to-asset parsed))]
+               (nil? (asset/expand (:to-asset parsed))))
+          (conj {:problem :asset-abbreviation-unrecognized
+                 :requested to-asset :returned (:to-asset parsed)
+                 :note (str "not asset notation and not a verified abbreviation — add it to "
+                            "thorchain.asset/verified-abbreviations after reading it out of a "
+                            "live node's memo, rather than guessing")})
+
+          (and parsed to-asset (:to-asset parsed)
+               (some? (asset/expand (:to-asset parsed)))
+               (let [want (asset/expand to-asset) got (asset/expand (:to-asset parsed))]
                  (not (and (= (:chain want) (:chain got))
                            (= (:symbol want) (:symbol got))))))
           (conj {:problem :asset-mismatch

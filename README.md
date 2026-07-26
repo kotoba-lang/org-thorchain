@@ -83,9 +83,52 @@ endpoint.
 ```
 
 `verify-memo` checks the destination (case-insensitively — EVM addresses are
-checksummed inconsistently across APIs), the asset's chain+symbol (tolerating
-the node's abbreviated contract form), the affiliate list, and the total basis
-points in **both** directions: a quote that silently drops your fee fails too.
+checksummed inconsistently across APIs), the asset, the affiliate list, and the
+total basis points in **both** directions: a quote that silently drops your fee
+fails too.
+
+**The asset check has to understand the node's own dialect.** A live call was what
+revealed this: THORNode does not echo `ETH.ETH`, it writes **`e`** — and for tokens
+it drops the contract entirely (`ETH.USDC-0XA0B8…EB48` → `ETH.USDC`). Before that,
+`verify-memo` rejected *every legitimate live memo*. `thorchain.asset/expand` now
+resolves the abbreviations, from a table **measured against a live node** rather
+than guessed:
+
+| asset | abbreviation |
+|---|---|
+| `ETH.ETH` | `e` |
+| `BTC.BTC` | `b` |
+| `THOR.RUNE` | `r` |
+| `AVAX.AVAX` | `a` |
+
+Only measured entries are listed, and an unmeasured abbreviation **fails closed**
+as its own problem (`:asset-abbreviation-unrecognized`) rather than passing —
+because silently accepting an asset you cannot identify means possibly paying out
+a different one. To extend the table, request a quote for that asset from a node
+and read the abbreviation out of the returned memo.
+
+## An affiliate must be REGISTERED, and shape cannot tell you
+
+A live node rejects an unregistered THORName outright:
+
+```
+PARSE FAILURE(S): cannot parse 'kb' as an Address: kb is not recognizable
+```
+
+That fails the whole swap and refunds it minus fees — and an unregistered name is
+shape-identical to a registered one, so no offline validation catches it. Check
+before relying on a name:
+
+```clojure
+(q/thorname-request "kb")     ;=> {:method :get :path "/thorchain/thorname/kb"}
+(q/registered? body)          ;=> false — the route answers 200 either way, so the
+                              ;   discriminator is the presence of `owner`, not the
+                              ;   status code
+```
+
+With a registered name the network quotes the fee back to you — a live
+`BTC.BTC -> ETH.ETH` quote at 30 bps returned `fees.affiliate: 511881`, i.e. the
+skim is real and computed by the network, not by us.
 
 It deliberately does *not* compare against a locally rebuilt memo string — the
 node legitimately emits its own limit field and abbreviated assets, so string
@@ -113,6 +156,7 @@ Measured from a plain HTTP client on 2026-07-26:
 
 | host | state |
 |---|---|
+| `rest.cosmos.directory/thorchain` | **open** — serves the custom `/thorchain/*` routes (`quote/swap`, `thorname`) and is the one measured host a plain client can use |
 | `thornode.ninerealms.com` | **DNS does not resolve** (not even via `1.1.1.1`) |
 | `midgard.ninerealms.com` | DNS does not resolve |
 | `thornode.thorswap.net` | Cloudflare bot interstitial (`403`, *"Just a moment…"*) |

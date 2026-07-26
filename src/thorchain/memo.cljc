@@ -119,7 +119,14 @@
   lost funds on a Bitcoin inbound rather than a rejected call.
 
   `:short-asset? true` abbreviates a token's contract address to its last 4 hex
-  digits (`thorchain.asset/short-form`) to fit inside 80 bytes."
+  digits (`thorchain.asset/short-form`) to fit inside 80 bytes.
+
+  AN AFFILIATE MUST BE REGISTERED, and this function cannot check that. A live
+  node rejects an unregistered THORName outright (`cannot parse 'kb' as an
+  Address`), which fails the whole swap and refunds it minus fees — and an
+  unregistered name is shape-identical to a registered one, so no offline
+  validation can catch it. Check with `thorchain.quote/thorname-request` +
+  `registered?` before you rely on a name, or use a plain address."
   [{:keys [to-asset destination limit streaming-interval streaming-quantity
            affiliate affiliate-bps dex-aggregator dex-target-address
            dex-target-limit short-asset? allow-node-max?]}]
