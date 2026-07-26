@@ -72,6 +72,43 @@
   [asset]
   (some? (:contract (parse asset))))
 
+(def verified-abbreviations
+  "Single-token asset abbreviations THORNode ACTUALLY emits in the memos it
+  returns, measured against a live node on 2026-07-26 by requesting a quote per
+  asset and reading back `memo`:
+
+    ETH.ETH   -> \"e\"        AVAX.AVAX -> \"a\"
+    BTC.BTC   -> \"b\"        THOR.RUNE -> \"r\"
+
+  This table exists because a quote's memo is the thing that decides WHICH ASSET
+  the user receives, and the node writes it in its own abbreviated dialect — so a
+  verifier that only understands `CHAIN.SYMBOL` rejects every legitimate live
+  memo. That was a real defect here until a live call exposed it.
+
+  Only measured entries are listed. Other chains' shorthands are NOT guessed:
+  `expand` returns nil for an unknown single token and the caller reports it
+  loudly, because silently treating an unrecognized abbreviation as a match would
+  mean accepting a memo that pays out a different asset. To extend it, request a
+  quote for that asset against a node and read the abbreviation out of the memo —
+  the same way these four were obtained.
+
+  Contract tokens are abbreviated differently: the node drops the contract part
+  entirely (`ETH.USDC-0XA0B8…EB48` -> `ETH.USDC`), which the chain+symbol
+  comparison already tolerates without needing a table."
+  {"e" "ETH.ETH"
+   "b" "BTC.BTC"
+   "r" "THOR.RUNE"
+   "a" "AVAX.AVAX"})
+
+(defn expand
+  "Asset notation OR a verified single-token abbreviation -> a parsed asset map.
+  Returns nil for an unrecognized single token — deliberately, so the caller
+  fails closed rather than accepting an asset it cannot identify."
+  [s]
+  (or (parse s)
+      (when-let [full (get verified-abbreviations (str/lower-case (str/trim (str s))))]
+        (assoc (parse full) :abbreviated-from (str s)))))
+
 (defn short-form
   "Shorten an asset for a memo: THORChain accepts abbreviated notation, and a
   Bitcoin memo must fit in an 80-byte OP_RETURN, so `ETH.USDC-0X A0B8…EB48` ->

@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [thorchain.asset :as asset]
+            [thorchain.memo :as memo]
             [thorchain.quote :as q]))
 
 (def dest "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0")
@@ -183,3 +184,87 @@
   (is (false? (asset/evm-chain? "BTC.BTC")))
   (is (true? (asset/token? "ETH.USDC-0XA0B8")))
   (is (false? (asset/token? "ETH.ETH"))))
+
+;; ══ vectors captured from a LIVE THORNode (2026-07-26) ══
+;; These memos were produced by the network itself, not by this library. The
+;; first live call is what revealed that verify-memo rejected every legitimate
+;; memo: the node writes ETH.ETH as "e", and asset/parse returns nil for that.
+
+(def live-memo-no-affiliate
+  "=:e:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:166058037")
+
+(def live-memo-with-affiliate
+  "=:e:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:166058037:t:30")
+
+(deftest live-memo-parses
+  (let [p (memo/parse live-memo-with-affiliate)]
+    (is (= "e" (:to-asset p)) "the node abbreviates ETH.ETH to a single letter")
+    (is (= "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0" (:destination p)))
+    (is (= "166058037" (:limit p)) "and supplies its own LIM guard")
+    (is (= ["t"] (:affiliate p)))
+    (is (= 30 (memo/total-affiliate-bps p)))))
+
+(deftest verify-memo-accepts-the-abbreviated-live-memo
+  (testing "THE regression: this rejected legitimate live memos before"
+    (is (:ok? (q/verify-memo {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
+                              :to-asset "ETH.ETH" :affiliate "t" :affiliate-bps 30}
+                             live-memo-with-affiliate)))
+    (is (:ok? (q/verify-memo {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
+                              :to-asset "ETH.ETH"}
+                             live-memo-no-affiliate)))))
+
+(deftest verify-memo-still-catches-a-wrong-abbreviated-asset
+  (testing "tolerating abbreviations must not stop it catching the wrong asset"
+    (let [{:keys [ok? problems]}
+          (q/verify-memo {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
+                          :to-asset "ETH.ETH"}
+                         "=:b:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:166058037")]
+      (is (false? ok?))
+      (is (some #(= :asset-mismatch (:problem %)) problems)
+          "\"b\" is BTC.BTC — a different asset, abbreviated"))))
+
+(deftest unknown-abbreviation-fails-closed
+  (testing "an abbreviation we have not measured is its own problem, not a pass"
+    (let [{:keys [ok? problems]}
+          (q/verify-memo {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
+                          :to-asset "LTC.LTC"}
+                         "=:l:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:1")]
+      (is (false? ok?))
+      (is (some #(= :asset-abbreviation-unrecognized (:problem %)) problems)
+          "silently accepting it could mean paying out a different asset"))))
+
+(deftest expand-covers-measured-abbreviations-only
+  (is (= "ETH.ETH" (:asset (asset/expand "e"))))
+  (is (= "BTC.BTC" (:asset (asset/expand "b"))))
+  (is (= "THOR.RUNE" (:asset (asset/expand "r"))))
+  (is (= "AVAX.AVAX" (:asset (asset/expand "a"))))
+  (is (= "ETH.ETH" (:asset (asset/expand "ETH.ETH"))) "full notation still works")
+  (is (nil? (asset/expand "l")) "not measured -> nil, never a guess")
+  (is (nil? (asset/expand "zzz"))))
+
+(deftest token-contract-dropped-by-the-node-is-tolerated
+  (testing "the node emits ETH.USDC for ETH.USDC-0XA0B8…EB48 (contract dropped)"
+    (is (:ok? (q/verify-memo
+               {:destination "0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0"
+                :to-asset "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48"}
+               "=:ETH.USDC:0xe6a30f4f3bad978910e2cbb4d97581f5b5a0ade0:1")))))
+
+;; ══ THORName registration — an unregistered affiliate makes the swap refund ══
+
+(deftest thorname-request-shape
+  (is (= {:method :get :path "/thorchain/thorname/t"} (q/thorname-request "t"))))
+
+(deftest registered?-discriminates-on-owner-not-status
+  (testing "the route answers 200 for both; only a registered name has an owner"
+    ;; both bodies below are real /thorchain/thorname responses (2026-07-26)
+    (is (true? (q/registered?
+                {"name" "t" "owner" "thor166ngekj6ty2plw3n2vqpxk9fzv76rk7v80l2wt"
+                 "expire_block_height" 60787995})))
+    (is (false? (q/registered?
+                 {"name" "kb" "preferred_asset" "." "aliases" nil}))
+        "the live node rejects 'kb' as an affiliate: cannot parse as an Address")
+    (is (false? (q/registered? nil)))
+    (is (false? (q/registered? {"name" "x" "owner" ""})))))
+
+(deftest known-endpoints-records-the-one-open-host
+  (is (= :open (:state (get q/known-endpoints "rest.cosmos.directory/thorchain")))))
