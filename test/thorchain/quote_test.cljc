@@ -44,11 +44,27 @@
                (q/swap-quote-request (assoc req :amount "0.5")))
       "amount is 1e8 fixed point — a decimal means the caller confused units"))
 
+(def own-node "https://thornode.example.internal")
+
 (deftest url-encodes-query
-  (is (= (str "https://thornode.ninerealms.com/thorchain/quote/swap"
+  (is (= (str own-node "/thorchain/quote/swap"
               "?affiliate=kb&affiliate_bps=30&amount=10000000&destination=" dest
               "&from_asset=BTC.BTC&to_asset=ETH.ETH")
-         (q/url q/mainnet-base-url (q/swap-quote-request req)))))
+         (q/url own-node (q/swap-quote-request req)))))
+
+(deftest url-requires-a-base
+  (testing "no default: a default pointing at a dead or bot-gated host would fail
+            at the moment someone is moving funds, and look like a bug here"
+    (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                 (q/url nil (q/swap-quote-request req))))
+    (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                 (q/url "  " (q/swap-quote-request req))))))
+
+(deftest known-endpoints-records-measured-state
+  (testing "the map is measurements, not aspirations"
+    (is (= :dns-nxdomain (:state (get q/known-endpoints "thornode.ninerealms.com"))))
+    (is (= :bot-protected (:state (get q/known-endpoints "thornode.thorswap.net"))))
+    (is (every? :measured (vals q/known-endpoints)))))
 
 (deftest inbound-and-pools-requests
   (is (= {:method :get :path "/thorchain/inbound_addresses"}

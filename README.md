@@ -70,7 +70,7 @@ endpoint.
 (def request {:from-asset "BTC.BTC" :to-asset "ETH.ETH" :amount "10000000"
               :destination "0xe6a3…" :affiliate "kb" :affiliate-bps 30})
 
-(q/url q/mainnet-base-url (q/swap-quote-request request))
+(q/url my-own-thornode (q/swap-quote-request request))   ; base-url is required
 ;; …your HTTP client…
 (def quote (q/parse-swap-quote body))
 
@@ -106,9 +106,27 @@ already-decoded body. The caller supplies the transport. That keeps this pure
 `.cljc` — the same code runs in a browser wallet, under nbb, and on the JVM — and
 means the whole test suite runs without a network.
 
-It also means the node URL is *yours to choose*. `mainnet-base-url` is a
-convenience, not a default baked into requests: a public endpoint is a trusted
-third party in a flow whose entire premise is not needing one.
+It also means the node URL is *yours to choose* — and as of 2026-07-26 it is
+**yours to provide**, because there is no usable public default to offer.
+
+Measured from a plain HTTP client on 2026-07-26:
+
+| host | state |
+|---|---|
+| `thornode.ninerealms.com` | **DNS does not resolve** (not even via `1.1.1.1`) |
+| `midgard.ninerealms.com` | DNS does not resolve |
+| `thornode.thorswap.net` | Cloudflare bot interstitial (`403`, *"Just a moment…"*) |
+| `thornode.thorchain.liquify.com` | resolves, connection did not complete |
+
+So `base-url` is a **required argument** and `url` throws without one. A default
+pointing at a dead or bot-gated host is worse than no default: it fails at the
+moment someone is moving funds, and it looks like a bug in this library. The same
+measurements live in `thorchain.quote/known-endpoints` as data, with dates.
+
+Run your own node, or use an endpoint you have an agreement with. This library
+already said that was the right call — the measurements make it mandatory rather
+than advisory. **Working around bot protection is not something this library will
+do**, so it also does not pretend to have a keyless public path.
 
 ## API
 
