@@ -16,7 +16,7 @@
   re-parses the returned memo and checks the destination, the affiliate and the
   basis points against what was actually requested, so a substituted destination
   fails locally instead of on-chain."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [thorchain.asset :as asset]
             [thorchain.memo :as memo]))
 
@@ -231,8 +231,8 @@
           (conj {:problem :not-a-swap-memo :memo returned-memo})
 
           (and parsed destination
-               (not= (str/lower-case (str destination))
-                     (str/lower-case (str (:destination parsed)))))
+               (not= (str/lower (str destination))
+                     (str/lower (str (:destination parsed)))))
           (conj {:problem :destination-mismatch
                  :requested destination :returned (:destination parsed)})
 

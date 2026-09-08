@@ -7,7 +7,7 @@
   differ by one field and are different tokens on different chains, so this
   namespace parses and re-renders rather than doing string surgery at call
   sites."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 ;; Native gas assets of chains THORChain supports for BTC<->ETH-class flows.
 ;; Not an exhaustive registry — deliberately: a hard-coded \"supported assets\"
@@ -39,22 +39,22 @@
     (let [s (str/trim s)
           idx (first (keep-indexed (fn [i c] (when (separators c) i)) s))]
       (when (and idx (pos? idx) (< (inc idx) (count s)))
-        (let [chain (str/upper-case (subs s 0 idx))
+        (let [chain (str/upper (subs s 0 idx))
               kind (separators (nth s idx))
               rest-part (subs s (inc idx))
               [sym contract] (str/split rest-part #"-" 2)]
           {:chain chain
-           :symbol (str/upper-case sym)
-           :contract (some-> contract str/upper-case)
+           :symbol (str/upper sym)
+           :contract (some-> contract str/upper)
            :kind kind
-           :asset (str chain (nth s idx) (str/upper-case rest-part))})))))
+           :asset (str chain (nth s idx) (str/upper rest-part))})))))
 
 (defn format-asset
   "{:chain :symbol :contract :kind} -> asset notation string."
   [{:keys [chain symbol contract kind] :or {kind :layer1}}]
   (let [sep (case kind :layer1 "." :synth "/" :trade "~")]
-    (str (str/upper-case chain) sep (str/upper-case symbol)
-         (when (seq contract) (str "-" (str/upper-case contract))))))
+    (str (str/upper chain) sep (str/upper symbol)
+         (when (seq contract) (str "-" (str/upper contract))))))
 
 (defn valid?
   "Is `s` parseable asset notation?"
@@ -122,7 +122,7 @@
   fails closed rather than accepting an asset it cannot identify."
   [s]
   (or (parse s)
-      (when-let [full (get verified-abbreviations (str/lower-case (str/trim (str s))))]
+      (when-let [full (get verified-abbreviations (str/lower (str/trim (str s))))]
         (assoc (parse full) :abbreviated-from (str s)))))
 
 (defn short-form

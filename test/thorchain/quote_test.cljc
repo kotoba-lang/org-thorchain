@@ -2,7 +2,7 @@
   "Requests are asserted as data (no network), and `verify-memo` is tested with
   the adversarial cases it exists for: a quote endpoint that substitutes the
   destination address, swaps the asset, or quietly drops the affiliate fee."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [thorchain.asset :as asset]
             [thorchain.memo :as memo]
@@ -128,7 +128,7 @@
 
 (deftest verify-memo-tolerates-address-case
   (testing "EVM addresses are checksummed inconsistently across APIs"
-    (is (:ok? (q/verify-memo req (str "=:ETH.ETH:" (str/upper-case dest)
+    (is (:ok? (q/verify-memo req (str "=:ETH.ETH:" (str/upper dest)
                                       ":0/1/0:kb:30"))))))
 
 (deftest verify-memo-catches-substituted-destination
