@@ -22,7 +22,7 @@
   value applied to all of them or one per affiliate.
 
   Pure `.cljc`, dual-platform, no network access."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [thorchain.asset :as asset]))
 
 (def swap-prefix
@@ -191,7 +191,7 @@
   [memo]
   (when (string? memo)
     (let [parts (str/split (str/trim memo) #":" -1)
-          head (str/upper-case (or (first parts) ""))]
+          head (str/upper (or (first parts) ""))]
       (when (contains? swap-prefixes head)
         (let [at (fn [i] (let [v (get parts i)] (when (seq v) v)))
               lim (at 3)
