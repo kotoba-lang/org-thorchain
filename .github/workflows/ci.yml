@@ -58,4 +58,4 @@ jobs:
       - name: Install nbb
         run: npm install -g nbb
       - name: Run tests under ClojureScript
-        run: nbb --classpath src:test bin/run_tests.cljs
+        run: nbb --classpath src:test bin/run_tests.cljk

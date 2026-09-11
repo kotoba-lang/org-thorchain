@@ -1,6 +1,6 @@
 ;; nbb test runner — this library is meant to run in a browser wallet as well as
 ;; on a node, so the cljs suite is a CI gate, not an afterthought.
-;;   nbb --classpath src:test bin/run_tests.cljs
+;;   nbb --classpath src:test bin/run_tests.cljk
 (ns run-tests
   (:require [cljs.test :as t]
             [thorchain.memo-test]
