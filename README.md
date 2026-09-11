@@ -196,9 +196,9 @@ destination, substituted asset, dropped affiliate fee, inflated affiliate fee,
 non-swap memo.
 
 ```bash
-clojure -M:test                             # JVM  — 43 tests, 116 assertions
-nbb --classpath src:test bin/run_tests.cljk  # cljs — same suite
-clojure -M:lint
+kbb -M:test                             # JVM  — 43 tests, 116 assertions
+kbb --backend sci --classpath src:test bin/run_tests.cljk  # cljs — same suite
+kbb -M:lint
 ```
 
 ## Scope
