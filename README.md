@@ -197,7 +197,7 @@ non-swap memo.
 
 ```bash
 clojure -M:test                             # JVM  — 43 tests, 116 assertions
-nbb --classpath src:test bin/run_tests.cljs  # cljs — same suite
+nbb --classpath src:test bin/run_tests.cljk  # cljs — same suite
 clojure -M:lint
 ```
 
